@@ -21,7 +21,7 @@
           {{ cards.flush_list_group_item("Position", gene.leftpos~" - "~gene.rightpos, accent=True) }}
           {{ cards.flush_list_group_item("Strand", strand_string, accent=True) }}
           {{ cards.flush_list_group_item("Chromosome", gene.chromosome.ncbi_accession, accent=True) }}
-          {{ cards.flush_list_group_item("Chromosome", gene.chromosome.genome.accession_type ~ ":" ~ gene.chromosome.genome.accession_value, link="/genomes/"~gene.chromosome.genome.accession_type ~ ":" ~ gene.chromosome.genome.accession_value, accent=True) }}
+          {{ cards.flush_list_group_item("Assembly", gene.chromosome.genome.accession_type ~ ":" ~ gene.chromosome.genome.accession_value, link="/genomes/"~gene.chromosome.genome.accession_type ~ ":" ~ gene.chromosome.genome.accession_value, accent=True) }}
         {% endif %}
         {% if gene.chromosome.genome.accession_type == "pankb_assembly" %}
           {{ cards.flush_list_group_item("PanKB Gene", bigg_id, link="https://pankb.org/gene_function/genome_gene_info/?genome_id="~genome_name~"&locus_tag="~bigg_id, accent=True) }}

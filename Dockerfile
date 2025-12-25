@@ -16,15 +16,13 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt /app/
 RUN pip install -r requirements.txt
 
-RUN git clone https://github.com/pascalaldo/bigg_models_data.git bigg_models_data
-
-RUN git clone https://github.com/pascalaldo/biggr_maps.git biggr_maps
+RUN git clone https://github.com/biosustain/biggr_maps.git biggr_maps
 WORKDIR /app/biggr_maps/
 # RUN git pull && git reset --hard 54c6d88
 RUN python setup.py install
 WORKDIR /app
 
-RUN git clone https://github.com/pascalaldo/cobradb.git cobradb
+RUN git clone https://github.com/biosustain/cobradb.git cobradb
 WORKDIR /app/cobradb
 # RUN git pull && git reset --hard 313ce67
 RUN python setup.py install
