@@ -15,14 +15,13 @@ jobs:
           persist-credentials: false
 
       - name: Copy files using SCP
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.BIGGR_PROD_HOST }}
           username: ${{ secrets.BIGGR_PROD_SSH_USERNAME }}
           key: ${{ secrets.BIGGR_PROD_PRIVATE_SSH_KEY }}
           source: "."
           target: "/data/projects/biggr_models/"
-  
       - name: Create the .env file and (re-)start containers over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
