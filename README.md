@@ -20,21 +20,15 @@ For development environments:
 1. Download cobradb with ```git clone git@github.com:biosustain/cobradb.git```.
 2. Download the code with ```git clone git@github.com:biosustain/biggr_models.git```
 3. ```cd biggr_models```
-4. TODO: SETTINGS, OTHER FILES
+4. For setting up the `settings.ini` and `.env` files, and various `/data/...` directories,
+    please refer to the [cobradb](https://github.com/biosustain/cobradb) readme.
 5. Run ```docker compose --profile dev up --build```.
 
 For production environments:
 1. Download the code with ```git clone git@github.com:biosustain/biggr_models.git```
 2. ```cd biggr_models```
-3. TODO: SETTINGS, OTHER FILES
+3. For setting up the `settings.ini` and `.env` files, and various `/data/...` directories,
+    please refer to the [cobradb](https://github.com/biosustain/cobradb) readme.
 4. Run ```docker compose --profile prod up --build```.
 
 Note that for the biggr.org server, a CI/CD pipeline is implemented on GitHub.
-
-License
-=======
-
-This codebase is released under the
-[MIT license](https://github.com/SBRG/bigg_models/blob/master/LICENSE). The
-license information for the BiGG Models website hosted at SBRG and the
-associated models can be found here: http://bigg.ucsd.edu/license.
