@@ -15,9 +15,15 @@ def get_genomes_count(session, **kwargs):
 
 def get_all_genomes(session):
     """Get all genomes."""
-    rows = session.execute(select(Genome.accession_value).distinct()).all()
+    rows = session.execute(
+        select(Genome.accession_type, Genome.accession_value).distinct()
+    ).all()
 
-    return [r[0] for r in rows]
+    return [
+        {"strain": r.accession_value, "accession_type": r.accession_type}
+        for r in rows
+        if r.accession_value is not None
+    ]
 
 
 def get_genomes(

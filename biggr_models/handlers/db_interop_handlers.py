@@ -8,6 +8,9 @@ from biggr_models.queries import gene_queries, genome_queries
 from sqlalchemy import inspect
 
 
+BASE_URL = "https://biggr.org"
+
+
 class BaseInteropQueryHandler(tornado.web.RequestHandler):
 
     def _parse_json(self):
@@ -87,6 +90,8 @@ class QueryByStrainHandler(BaseInteropQueryHandler):
                 genome_queries.get_genomes_with_chromosomes,
                 accession_id,
             )
+            for r in genome_results:
+                r["url"] = f"{BASE_URL}/genomes/{r['accession_type']}:{r['accession_value']}"
             results.extend(genome_results)
 
         self.finish({"results": results})
@@ -149,7 +154,8 @@ class StrainListHandler(BaseInteropQueryHandler):
     async def get(self):
         print("interop-query: strain-list")
         strains = utils.safe_query(genome_queries.get_all_genomes)
-        strains = [strain for strain in strains if strain is not None]
+        for s in strains:
+            s["url"] = f"{BASE_URL}/genomes/{s.pop('accession_type')}:{s['strain']}"
         self.finish({"strains": strains})
 
 
