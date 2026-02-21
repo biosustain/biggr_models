@@ -51,6 +51,7 @@ class QueryByGeneHandler(BaseInteropQueryHandler):
         gene_info_map = {g["id"]: g for g in genes_info}
 
         regions = utils.safe_query(gene_queries.get_genome_region_for_gene_id, gene_ids)
+        url_map = utils.safe_query(gene_queries.get_urls_for_gene_ids, gene_ids)
 
         results = []
         for region in regions:
@@ -65,6 +66,7 @@ class QueryByGeneHandler(BaseInteropQueryHandler):
                     "locus_tag": ginfo.get("locus_tag"),
                     "mapped_to_genbank": ginfo.get("mapped_to_genbank"),
                     "genome_region": {k: v for k, v in region.items()},
+                    "urls": [f"{BASE_URL}{u}" for u in url_map.get(gid, [])],
                 }
             )
 
@@ -162,6 +164,7 @@ class StrainListHandler(BaseInteropQueryHandler):
 class GeneListHandler(BaseInteropQueryHandler):
     async def get(self):
         print("interop-query: gene-list")
-        genes = utils.safe_query(gene_queries.get_all_genes)
-        gene_names = [gene["name"] for gene in genes if gene["name"] is not None]
-        self.finish({"genes": gene_names})
+        genes = utils.safe_query(gene_queries.get_all_genes_with_urls)
+        for g in genes:
+            g["urls"] = [f"{BASE_URL}{url}" for url in g["urls"]]
+        self.finish({"genes": genes})

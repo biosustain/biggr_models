@@ -45,6 +45,74 @@ def get_all_genes(session):
     return [dict(r._mapping) for r in rows]
 
 
+def get_all_genes_with_urls(session):
+    """Get all genes with their associated genome and model URLs."""
+    # Genome URL: /genomes/{accession_type}:{accession_value}/genes/{bigg_id}
+    genome_rows = session.execute(
+        select(Gene.name, Gene.bigg_id, Genome.accession_type, Genome.accession_value)
+        .join(Chromosome, Chromosome.id == Gene.chromosome_id)
+        .join(Genome, Genome.id == Chromosome.genome_id)
+        .filter(Gene.name.isnot(None))
+    ).all()
+
+    # Model URL: /models/{model_bigg_id}/genes/{bigg_id}
+    model_rows = session.execute(
+        select(Gene.name, Gene.bigg_id, Model.bigg_id)
+        .join(ModelGene, ModelGene.gene_id == Gene.id)
+        .join(Model, Model.id == ModelGene.model_id)
+        .filter(Gene.name.isnot(None))
+    ).all()
+
+    # Group URLs by gene name
+    gene_map = {}
+    for name, bigg_id, acc_type, acc_value in genome_rows:
+        gene_map.setdefault(name, set()).add(
+            f"/genomes/{acc_type}:{acc_value}/genes/{bigg_id}"
+        )
+    for name, bigg_id, model_bigg_id in model_rows:
+        gene_map.setdefault(name, set()).add(
+            f"/models/{model_bigg_id}/genes/{bigg_id}"
+        )
+
+    return [
+        {"name": name, "urls": sorted(urls)}
+        for name, urls in sorted(gene_map.items())
+    ]
+
+
+def get_urls_for_gene_ids(gene_ids, session):
+    """Get genome and model URLs for a list of gene IDs, grouped by gene ID."""
+    gene_ids = list(gene_ids)
+
+    # Genome URL: /genomes/{accession_type}:{accession_value}/genes/{bigg_id}
+    genome_rows = session.execute(
+        select(Gene.id, Gene.bigg_id, Genome.accession_type, Genome.accession_value)
+        .join(Chromosome, Chromosome.id == Gene.chromosome_id)
+        .join(Genome, Genome.id == Chromosome.genome_id)
+        .filter(Gene.id.in_(gene_ids))
+    ).all()
+
+    # Model URL: /models/{model_bigg_id}/genes/{bigg_id}
+    model_rows = session.execute(
+        select(Gene.id, Gene.bigg_id, Model.bigg_id)
+        .join(ModelGene, ModelGene.gene_id == Gene.id)
+        .join(Model, Model.id == ModelGene.model_id)
+        .filter(Gene.id.in_(gene_ids))
+    ).all()
+
+    url_map = {}
+    for gid, bigg_id, acc_type, acc_value in genome_rows:
+        url_map.setdefault(gid, set()).add(
+            f"/genomes/{acc_type}:{acc_value}/genes/{bigg_id}"
+        )
+    for gid, bigg_id, model_bigg_id in model_rows:
+        url_map.setdefault(gid, set()).add(
+            f"/models/{model_bigg_id}/genes/{bigg_id}"
+        )
+
+    return {gid: sorted(urls) for gid, urls in url_map.items()}
+
+
 def get_genome_region_for_gene_id(ids, session):
     """Get the genome region for a gene id."""
     rows = session.execute(
