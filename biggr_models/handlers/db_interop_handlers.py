@@ -141,6 +141,12 @@ class QueryByPairHandler(BaseInteropQueryHandler):
                 gene_id_filter=gene_ids,
             )
 
+            for g in genomes:
+                genome_ref = f"{g['accession_type']}:{g['accession_value']}"
+                for chrom in g.get("chromosome", []):
+                    for region in chrom.get("genome_region", []):
+                        region["url"] = f"{BASE_URL}/genomes/{genome_ref}/genes/{region['bigg_id']}"
+
             pair_results.append(
                 {
                     "gene": gene_name,
