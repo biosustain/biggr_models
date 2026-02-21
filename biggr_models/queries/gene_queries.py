@@ -80,6 +80,34 @@ def get_all_genes_with_urls(session):
     ]
 
 
+def get_all_gene_strain_pairs(session):
+    """Get all gene-strain pairs with their genome URLs."""
+    rows = session.execute(
+        select(
+            Gene.name,
+            Gene.bigg_id,
+            Gene.locus_tag,
+            Genome.accession_type,
+            Genome.accession_value,
+        )
+        .join(Chromosome, Chromosome.id == Gene.chromosome_id)
+        .join(Genome, Genome.id == Chromosome.genome_id)
+        .filter(Gene.name.isnot(None))
+    ).all()
+
+    # Group by (gene_name, strain), collecting URLs
+    pair_map = {}
+    for name, bigg_id, locus_tag, acc_type, acc_value in rows:
+        key = (name, acc_value)
+        if key not in pair_map:
+            pair_map[key] = {"gene": name, "strain": acc_value, "urls": []}
+        pair_map[key]["urls"].append(
+            f"/genomes/{acc_type}:{acc_value}/genes/{bigg_id}"
+        )
+
+    return list(pair_map.values())
+
+
 def get_urls_for_gene_ids(gene_ids, session):
     """Get genome and model URLs for a list of gene IDs, grouped by gene ID."""
     gene_ids = list(gene_ids)

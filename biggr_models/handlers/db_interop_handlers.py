@@ -174,3 +174,12 @@ class GeneListHandler(BaseInteropQueryHandler):
         for g in genes:
             g["urls"] = [f"{BASE_URL}{url}" for url in g["urls"]]
         self.finish({"genes": genes})
+
+
+class GeneStrainPairListHandler(BaseInteropQueryHandler):
+    async def get(self):
+        print("interop-query: gene-strain-pairs")
+        pairs = utils.safe_query(gene_queries.get_all_gene_strain_pairs)
+        for p in pairs:
+            p["urls"] = [f"{BASE_URL}{url}" for url in p["urls"]]
+        self.finish({"pairs": pairs})

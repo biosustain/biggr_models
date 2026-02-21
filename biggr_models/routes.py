@@ -301,5 +301,6 @@ def get_routes():
         (r"/interop-query/query-by-pair/?$", db_interop_handlers.QueryByPairHandler),
         (r"/interop-query/strains/?$", db_interop_handlers.StrainListHandler),
         (r"/interop-query/genes/?$", db_interop_handlers.GeneListHandler),
+        (r"/interop-query/gene-strain-pairs/?$", db_interop_handlers.GeneStrainPairListHandler),
     ]
     return routes
