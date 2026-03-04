@@ -47,7 +47,6 @@ def get_all_genes(session):
 
 def get_all_genes_with_urls(session):
     """Get all genes with their associated genome and model URLs."""
-    # Genome URL: /genomes/{accession_type}:{accession_value}/genes/{bigg_id}
     genome_rows = session.execute(
         select(Gene.name, Gene.bigg_id, Genome.accession_type, Genome.accession_value)
         .join(Chromosome, Chromosome.id == Gene.chromosome_id)
@@ -55,7 +54,6 @@ def get_all_genes_with_urls(session):
         .filter(Gene.name.isnot(None))
     ).all()
 
-    # Model URL: /models/{model_bigg_id}/genes/{bigg_id}
     model_rows = session.execute(
         select(Gene.name, Gene.bigg_id, Model.bigg_id)
         .join(ModelGene, ModelGene.gene_id == Gene.id)
@@ -63,21 +61,22 @@ def get_all_genes_with_urls(session):
         .filter(Gene.name.isnot(None))
     ).all()
 
-    # Group URLs by gene name
-    gene_map = {}
+    results = []
     for name, bigg_id, acc_type, acc_value in genome_rows:
-        gene_map.setdefault(name, set()).add(
-            f"/genomes/{acc_type}:{acc_value}/genes/{bigg_id}"
-        )
-    for name, bigg_id, model_bigg_id in model_rows:
-        gene_map.setdefault(name, set()).add(
-            f"/models/{model_bigg_id}/genes/{bigg_id}"
-        )
+        genome = f"{acc_type}:{acc_value}"
+        results.append({
+            "gene": name,
+            "genome": genome,
+            "url": f"/genomes/{genome}/genes/{bigg_id}",
+        })
+    for name, gene_bigg_id, model_bigg_id in model_rows:
+        results.append({
+            "gene": name,
+            "bigg_id": model_bigg_id,
+            "url": f"/models/{model_bigg_id}/genes/{gene_bigg_id}",
+        })
 
-    return [
-        {"name": name, "urls": sorted(urls)}
-        for name, urls in sorted(gene_map.items())
-    ]
+    return results
 
 
 def get_all_gene_strain_pairs(session):

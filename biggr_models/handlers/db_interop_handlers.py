@@ -166,7 +166,7 @@ class GeneListHandler(BaseInteropQueryHandler):
         print("interop-query: gene-list")
         genes = utils.safe_query(gene_queries.get_all_genes_with_urls)
         for g in genes:
-            g["urls"] = [f"{BASE_URL}{url}" for url in g["urls"]]
+            g["url"] = f"{BASE_URL}{g['url']}"
         self.finish({"genes": genes})
 
 
