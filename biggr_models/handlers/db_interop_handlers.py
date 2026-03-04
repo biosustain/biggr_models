@@ -133,6 +133,8 @@ class QueryByPairHandler(BaseInteropQueryHandler):
                 genome_queries.get_genomes_with_chromosomes,
                 accession_id=strain_id,
                 gene_id_filter=gene_ids,
+                include_metabolites=False,
+                include_reactions=False,
             )
 
             for g in genomes:
