@@ -142,32 +142,48 @@ def get_all_genes_with_urls(session, genome_cursor=None, model_cursor=None, limi
     }
 
 
-def get_all_gene_strain_pairs(session):
-    """Get all gene-strain pairs with their genome URLs."""
-    rows = session.execute(
+def get_all_gene_strain_pairs(session, after=None, limit=100000):
+    """Get all gene-strain pairs, one row per (gene, strain, bigg_id). Cursor-based pagination."""
+    query = (
         select(
+            Gene.id,
             Gene.name,
             Gene.bigg_id,
-            Gene.locus_tag,
             Genome.accession_type,
             Genome.accession_value,
         )
         .join(Chromosome, Chromosome.id == Gene.chromosome_id)
         .join(Genome, Genome.id == Chromosome.genome_id)
         .filter(Gene.name.isnot(None))
-    ).all()
+        .order_by(Gene.id)
+    )
+    if after is not None:
+        query = query.filter(Gene.id > int(after))
+    query = query.limit(limit + 1)
 
-    # Group by (gene_name, strain), collecting URLs
-    pair_map = {}
-    for name, bigg_id, locus_tag, acc_type, acc_value in rows:
-        key = (name, acc_value)
-        if key not in pair_map:
-            pair_map[key] = {"gene": name, "strain": acc_value, "urls": []}
-        pair_map[key]["urls"].append(
-            f"/genomes/{acc_type}:{acc_value}/genes/{bigg_id}"
-        )
+    rows = session.execute(query).all()
 
-    return list(pair_map.values())
+    has_more = len(rows) > limit
+    if has_more:
+        rows = rows[:limit]
+
+    next_cursor = str(rows[-1][0]) if has_more else None
+
+    pairs = [
+        {
+            "gene": r[1],
+            "strain": r[4],
+            "bigg_id": r[2],
+            "url": f"/genomes/{r[3]}:{r[4]}/genes/{r[2]}",
+        }
+        for r in rows
+    ]
+
+    return {
+        "pairs": pairs,
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+    }
 
 
 def get_genes_with_genome_region(gene_ids, session):
