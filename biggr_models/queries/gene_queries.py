@@ -108,6 +108,86 @@ def get_all_gene_strain_pairs(session):
     return list(pair_map.values())
 
 
+def get_genes_with_genome_region(gene_ids, session):
+    """Get gene + genome_region flattened data with genome_gene_url for a list of gene IDs."""
+    gene_ids = list(gene_ids)
+    rows = session.execute(
+        select(
+            Gene.id,
+            Gene.name,
+            Gene.locus_tag,
+            Gene.mapped_to_genbank,
+            GenomeRegion.bigg_id,
+            GenomeRegion.chromosome_id,
+            GenomeRegion.leftpos,
+            GenomeRegion.rightpos,
+            GenomeRegion.strand,
+            GenomeRegion.type,
+            GenomeRegion.dna_sequence,
+            GenomeRegion.protein_sequence,
+            Genome.accession_type,
+            Genome.accession_value,
+        )
+        .join(GenomeRegion, GenomeRegion.id == Gene.id)
+        .join(Chromosome, Chromosome.id == GenomeRegion.chromosome_id)
+        .join(Genome, Genome.id == Chromosome.genome_id)
+        .filter(Gene.id.in_(gene_ids))
+    ).all()
+
+    return [
+        {
+            "id": r[0],
+            "name": r[1],
+            "locus_tag": r[2],
+            "mapped_to_genbank": r[3],
+            "bigg_id": r[4],
+            "chromosome_id": r[5],
+            "leftpos": r[6],
+            "rightpos": r[7],
+            "strand": r[8],
+            "type": r[9],
+            "dna_sequence": r[10],
+            "protein_sequence": r[11],
+            "genome_gene_url": f"/genomes/{r[12]}:{r[13]}/genes/{r[4]}",
+        }
+        for r in rows
+    ]
+
+
+def get_model_genes_for_gene_ids(gene_ids, session):
+    """Get model_gene + model flattened data with model_gene_url for a list of gene IDs."""
+    gene_ids = list(gene_ids)
+    rows = session.execute(
+        select(
+            ModelGene.id,
+            ModelGene.gene_id,
+            ModelGene.model_id,
+            Model.bigg_id,
+            Model.organism,
+            Model.genome_id,
+            Model.published_filename,
+            Gene.bigg_id,
+        )
+        .join(Model, Model.id == ModelGene.model_id)
+        .join(Gene, Gene.id == ModelGene.gene_id)
+        .filter(ModelGene.gene_id.in_(gene_ids))
+    ).all()
+
+    return [
+        {
+            "model_gene_id": r[0],
+            "gene_id": r[1],
+            "model_id": r[2],
+            "bigg_id": r[3],
+            "organism": r[4],
+            "genome_id": r[5],
+            "published_filename": r[6],
+            "model_gene_url": f"/models/{r[3]}/genes/{r[7]}",
+        }
+        for r in rows
+    ]
+
+
 def get_urls_for_gene_ids(gene_ids, session):
     """Get genome and model URLs for a list of gene IDs, grouped by gene ID."""
     gene_ids = list(gene_ids)

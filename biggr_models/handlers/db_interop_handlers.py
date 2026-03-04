@@ -37,38 +37,32 @@ class QueryByGeneHandler(BaseInteropQueryHandler):
         if not isinstance(gene_names, list):
             raise tornado.web.HTTPError(400, reason="'ids' must be a list.")
 
-        gene_ids = [
-            row
-            for gene in gene_names
-            for row in utils.safe_query(gene_queries.get_gene_ids_for_gene_name, gene)
-        ]
-
-        if not gene_ids:
-            self.finish({"results": []})
-            return
-
-        genes_info = utils.safe_query(gene_queries.get_genes, gene_ids)
-        gene_info_map = {g["id"]: g for g in genes_info}
-
-        regions = utils.safe_query(gene_queries.get_genome_region_for_gene_id, gene_ids)
-        url_map = utils.safe_query(gene_queries.get_urls_for_gene_ids, gene_ids)
-
         results = []
-        for region in regions:
-            gid = region["id"]
-            ginfo = gene_info_map.get(gid, {})
-
-            results.append(
-                {
-                    "gene_id": gid,
-                    "name": ginfo.get("name"),
-                    "bigg_id": ginfo.get("bigg_id"),
-                    "locus_tag": ginfo.get("locus_tag"),
-                    "mapped_to_genbank": ginfo.get("mapped_to_genbank"),
-                    "genome_region": {k: v for k, v in region.items()},
-                    "urls": [f"{BASE_URL}{u}" for u in url_map.get(gid, [])],
-                }
+        for gene_name in gene_names:
+            gene_ids = utils.safe_query(
+                gene_queries.get_gene_ids_for_gene_name, gene_name
             )
+            if not gene_ids:
+                results.append({"name": gene_name, "genes": [], "models": []})
+                continue
+
+            genes = utils.safe_query(
+                gene_queries.get_genes_with_genome_region, gene_ids
+            )
+            for g in genes:
+                g["genome_gene_url"] = f"{BASE_URL}{g['genome_gene_url']}"
+
+            models = utils.safe_query(
+                gene_queries.get_model_genes_for_gene_ids, gene_ids
+            )
+            for m in models:
+                m["model_gene_url"] = f"{BASE_URL}{m['model_gene_url']}"
+
+            results.append({
+                "name": gene_name,
+                "genes": genes,
+                "models": models,
+            })
 
         self.finish({"results": results})
 
