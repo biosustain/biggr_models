@@ -45,38 +45,101 @@ def get_all_genes(session):
     return [dict(r._mapping) for r in rows]
 
 
-def get_all_genes_with_urls(session):
-    """Get all genes with their associated genome and model URLs."""
-    genome_rows = session.execute(
-        select(Gene.name, Gene.bigg_id, Genome.accession_type, Genome.accession_value)
-        .join(Chromosome, Chromosome.id == Gene.chromosome_id)
-        .join(Genome, Genome.id == Chromosome.genome_id)
-        .filter(Gene.name.isnot(None))
-    ).all()
+def get_all_genes_with_urls(session, genome_cursor=None, model_cursor=None, limit=100000):
+    """Get all genes with URLs, cursor-based pagination.
 
-    model_rows = session.execute(
-        select(Gene.name, Gene.bigg_id, Model.bigg_id)
-        .join(ModelGene, ModelGene.gene_id == Gene.id)
-        .join(Model, Model.id == ModelGene.model_id)
-        .filter(Gene.name.isnot(None))
-    ).all()
-
+    Paginates genome results first, then model results.
+    - genome_cursor: Gene.id to start after for genome results
+    - model_cursor: ModelGene.id to start after for model results
+    - If model_cursor is provided, genome results are skipped (already exhausted).
+    """
     results = []
-    for name, bigg_id, acc_type, acc_value in genome_rows:
-        genome = f"{acc_type}:{acc_value}"
-        results.append({
-            "gene": name,
-            "genome": genome,
-            "url": f"/genomes/{genome}/genes/{bigg_id}",
-        })
-    for name, gene_bigg_id, model_bigg_id in model_rows:
-        results.append({
-            "gene": name,
-            "bigg_id": model_bigg_id,
-            "url": f"/models/{model_bigg_id}/genes/{gene_bigg_id}",
-        })
+    next_genome_cursor = None
+    next_model_cursor = None
+    remaining = limit
 
-    return results
+    # Phase 1: genome results (skip if model_cursor is set)
+    if model_cursor is None:
+        query = (
+            select(Gene.id, Gene.name, Gene.bigg_id, Genome.accession_type, Genome.accession_value)
+            .join(Chromosome, Chromosome.id == Gene.chromosome_id)
+            .join(Genome, Genome.id == Chromosome.genome_id)
+            .filter(Gene.name.isnot(None))
+            .order_by(Gene.id)
+        )
+        if genome_cursor is not None:
+            query = query.filter(Gene.id > int(genome_cursor))
+        query = query.limit(remaining + 1)
+        genome_rows = session.execute(query).all()
+
+        if len(genome_rows) > remaining:
+            genome_rows = genome_rows[:remaining]
+            next_genome_cursor = str(genome_rows[-1][0])
+            return {
+                "genes": [
+                    {
+                        "gene": r[1],
+                        "genome": f"{r[3]}:{r[4]}",
+                        "url": f"/genomes/{r[3]}:{r[4]}/genes/{r[2]}",
+                    }
+                    for r in genome_rows
+                ],
+                "next_genome_cursor": next_genome_cursor,
+                "next_model_cursor": None,
+                "has_more": True,
+            }
+
+        for r in genome_rows:
+            results.append({
+                "gene": r[1],
+                "genome": f"{r[3]}:{r[4]}",
+                "url": f"/genomes/{r[3]}:{r[4]}/genes/{r[2]}",
+            })
+        remaining -= len(genome_rows)
+
+    # Phase 2: model results
+    if remaining > 0:
+        query = (
+            select(ModelGene.id, Gene.name, Gene.bigg_id, Model.bigg_id)
+            .join(Gene, Gene.id == ModelGene.gene_id)
+            .join(Model, Model.id == ModelGene.model_id)
+            .filter(Gene.name.isnot(None))
+            .order_by(ModelGene.id)
+        )
+        if model_cursor is not None:
+            query = query.filter(ModelGene.id > int(model_cursor))
+        query = query.limit(remaining + 1)
+        model_rows = session.execute(query).all()
+
+        if len(model_rows) > remaining:
+            model_rows = model_rows[:remaining]
+            next_model_cursor = str(model_rows[-1][0])
+            for r in model_rows:
+                results.append({
+                    "gene": r[1],
+                    "bigg_id": r[3],
+                    "url": f"/models/{r[3]}/genes/{r[2]}",
+                })
+            return {
+                "genes": results,
+                "next_genome_cursor": None,
+                "next_model_cursor": next_model_cursor,
+                "has_more": True,
+            }
+
+        for r in model_rows:
+            results.append({
+                "gene": r[1],
+                "bigg_id": r[3],
+                "url": f"/models/{r[3]}/genes/{r[2]}",
+            })
+
+    return {
+        "genes": results,
+        "next_genome_cursor": None,
+        "next_model_cursor": None,
+        "has_more": False,
+    }
 
 
 def get_all_gene_strain_pairs(session):
