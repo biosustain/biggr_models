@@ -26,7 +26,8 @@ from biggr_models.handlers import utils
 from biggr_models.queries import utils as query_utils
 
 ALLOWED_SEARCH_ALPHABET = (
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-()[]/:.,"
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    "_+-()[]/:.,' &;{}=?`|#*^"
 )
 
 
