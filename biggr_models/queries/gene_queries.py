@@ -45,21 +45,31 @@ def get_all_genes(session):
     return [dict(r._mapping) for r in rows]
 
 
-def get_all_genes_with_urls(session, genome_cursor=None, model_cursor=None, limit=100000):
+def get_all_genes_with_urls(session, after=None, limit=100000):
     """Get all genes with URLs, cursor-based pagination.
 
-    Paginates genome results first, then model results.
-    - genome_cursor: Gene.id to start after for genome results
-    - model_cursor: ModelGene.id to start after for model results
-    - If model_cursor is provided, genome results are skipped (already exhausted).
+    Uses a single opaque cursor that encodes the internal two-phase state
+    (genome genes first, then model genes).
+
+    Cursor format: "g:<Gene.id>" for genome phase, "m:<ModelGene.id>" for model phase.
     """
     results = []
-    next_genome_cursor = None
-    next_model_cursor = None
     remaining = limit
 
-    # Phase 1: genome results (skip if model_cursor is set)
-    if model_cursor is None:
+    # Decode cursor to determine phase and offset
+    in_model_phase = False
+    genome_after = None
+    model_after = None
+    if after is not None:
+        if after.startswith("m:"):
+            in_model_phase = True
+            model_after = int(after[2:])
+        else:
+            # "g:<id>" or legacy bare id
+            genome_after = int(after[2:]) if after.startswith("g:") else int(after)
+
+    # Phase 1: genome results (skip if already in model phase)
+    if not in_model_phase:
         query = (
             select(Gene.id, Gene.name, Gene.bigg_id, Genome.accession_type, Genome.accession_value)
             .join(Chromosome, Chromosome.id == Gene.chromosome_id)
@@ -67,14 +77,13 @@ def get_all_genes_with_urls(session, genome_cursor=None, model_cursor=None, limi
             .filter(Gene.name.isnot(None))
             .order_by(Gene.id)
         )
-        if genome_cursor is not None:
-            query = query.filter(Gene.id > int(genome_cursor))
+        if genome_after is not None:
+            query = query.filter(Gene.id > genome_after)
         query = query.limit(remaining + 1)
         genome_rows = session.execute(query).all()
 
         if len(genome_rows) > remaining:
             genome_rows = genome_rows[:remaining]
-            next_genome_cursor = str(genome_rows[-1][0])
             return {
                 "genes": [
                     {
@@ -84,8 +93,7 @@ def get_all_genes_with_urls(session, genome_cursor=None, model_cursor=None, limi
                     }
                     for r in genome_rows
                 ],
-                "next_genome_cursor": next_genome_cursor,
-                "next_model_cursor": None,
+                "next_cursor": f"g:{genome_rows[-1][0]}",
                 "has_more": True,
             }
 
@@ -106,14 +114,13 @@ def get_all_genes_with_urls(session, genome_cursor=None, model_cursor=None, limi
             .filter(Gene.name.isnot(None))
             .order_by(ModelGene.id)
         )
-        if model_cursor is not None:
-            query = query.filter(ModelGene.id > int(model_cursor))
+        if model_after is not None:
+            query = query.filter(ModelGene.id > model_after)
         query = query.limit(remaining + 1)
         model_rows = session.execute(query).all()
 
         if len(model_rows) > remaining:
             model_rows = model_rows[:remaining]
-            next_model_cursor = str(model_rows[-1][0])
             for r in model_rows:
                 results.append({
                     "gene": r[1],
@@ -122,8 +129,7 @@ def get_all_genes_with_urls(session, genome_cursor=None, model_cursor=None, limi
                 })
             return {
                 "genes": results,
-                "next_genome_cursor": None,
-                "next_model_cursor": next_model_cursor,
+                "next_cursor": f"m:{model_rows[-1][0]}",
                 "has_more": True,
             }
 
@@ -136,8 +142,7 @@ def get_all_genes_with_urls(session, genome_cursor=None, model_cursor=None, limi
 
     return {
         "genes": results,
-        "next_genome_cursor": None,
-        "next_model_cursor": None,
+        "next_cursor": None,
         "has_more": False,
     }
 

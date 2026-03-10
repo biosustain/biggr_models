@@ -166,14 +166,12 @@ class StrainListHandler(BaseInteropQueryHandler):
 class GeneListHandler(BaseInteropQueryHandler):
     async def get(self):
         print("interop-query: gene-list")
-        genome_cursor = self.get_argument("genome_cursor", None)
-        model_cursor = self.get_argument("model_cursor", None)
+        after = self.get_argument("after", None)
         limit = min(int(self.get_argument("limit", "100000")), 200000)
 
         result = utils.safe_query(
             gene_queries.get_all_genes_with_urls,
-            genome_cursor=genome_cursor,
-            model_cursor=model_cursor,
+            after=after,
             limit=limit,
         )
         for g in result["genes"]:
