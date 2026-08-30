@@ -3,6 +3,7 @@ from biggr_models.queries import utils
 from cobradb.util import ref_tuple_to_str
 from cobradb.models import (
     Chromosome,
+    DataSource,
     Gene,
     GeneReactionMatrix,
     Genome,
@@ -10,12 +11,57 @@ from cobradb.models import (
     ModelGene,
     ModelReaction,
     Reaction,
+    Synonym,
     UniversalReaction,
     GenomeRegion,
 )
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, subqueryload, contains_eager
+
+NON_LINK_SOURCES = {
+    "refseq_name",
+    "refseq_synonym",
+    "refseq_locus_tag",
+    "refseq_old_locus_tag",
+    "refseq_orf_id",
+}
+
+
+def get_database_links_for_gene(session: Session, gene_db_id: int) -> Dict[str, list]:
+    """Collect this gene's cross-references, grouped by source database.
+
+    The ETL already stores every /db_xref from the GenBank file as a synonym,
+    so this is a read of data that is loaded but was never surfaced. Sources
+    that merely restate the gene's own names are skipped, and a source with no
+    url_prefix yields text rather than a link.
+    """
+    rows = session.execute(
+        select(
+            DataSource.bigg_id,
+            DataSource.name,
+            DataSource.url_prefix,
+            Synonym.synonym,
+        )
+        .join(Synonym, Synonym.data_source_id == DataSource.id)
+        .filter(Synonym.type == "gene")
+        .filter(Synonym.ome_id == gene_db_id)
+    ).all()
+
+    links: Dict[str, list] = {}
+    for source_bigg_id, source_name, url_prefix, synonym in rows:
+        if source_bigg_id in NON_LINK_SOURCES:
+            continue
+        entry = {
+            "identifier": synonym,
+            "link": (url_prefix + synonym) if url_prefix else None,
+        }
+        label = source_name or source_bigg_id
+        # Several xrefs can share a source (multiple GO terms, for example).
+        bucket = links.setdefault(label, [])
+        if entry not in bucket:
+            bucket.append(entry)
+    return {k: sorted(v, key=lambda e: e["identifier"]) for k, v in sorted(links.items())}
 
 
 def get_gene_ids_for_gene_name(name, session):
@@ -418,6 +464,7 @@ def get_model_gene(gene_bigg_id, model_bigg_id, session):
             Gene.mapped_to_genbank,
             Gene.dna_sequence,
             Gene.protein_sequence,
+            Gene.id,
         )
         .join(ModelGene, ModelGene.gene_id == Gene.id)
         .join(Model, Model.id == ModelGene.model_id)
@@ -455,8 +502,7 @@ def get_model_gene(gene_bigg_id, model_bigg_id, session):
         for r in reaction_db
     ]
 
-    # synonym_db = id_queries._get_db_links_for_model_gene(gene_bigg_id, session)
-    synonym_db = {}
+    synonym_db = get_database_links_for_gene(session, result_db[12])
 
     # old_id_results = id_queries._get_old_ids_for_model_gene(
     #     gene_bigg_id, model_bigg_id, session
@@ -500,4 +546,7 @@ def get_gene(
     if gene_db is None:
         raise utils.NotFoundError("Could not find gene")
 
-    return {"gene": gene_db}
+    return {
+        "gene": gene_db,
+        "database_links": get_database_links_for_gene(session, gene_db.id),
+    }

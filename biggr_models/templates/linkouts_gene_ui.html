@@ -1,0 +1,30 @@
+{#
+  External database links for a gene.
+
+  Rendered from the cross-references the ETL already stores as gene synonyms
+  (UniProt, NCBI Gene, EcoCyc, GO, ...). A source whose data_source row has no
+  url_prefix has no address to link to, so its identifier is shown as plain
+  text rather than a dead link.
+#}
+{% if database_links %}
+<div class="card mb-3">
+  <div class="card-header">
+    <h5 class="mb-0">External Database Links</h5>
+  </div>
+  <ul class="list-group list-group-flush">
+    {% for source, entries in database_links.items() %}
+    <li class="list-group-item">
+      <i class="text-secondary">{{ source }}:</i>
+      {% for entry in entries %}
+      {%- if entry.link -%}
+      <a href="{{ entry.link }}" target="_blank" rel="noopener noreferrer">{{ entry.identifier }}</a>
+      {%- else -%}
+      <span>{{ entry.identifier }}</span>
+      {%- endif -%}
+      {%- if not loop.last %}, {% endif -%}
+      {% endfor %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
