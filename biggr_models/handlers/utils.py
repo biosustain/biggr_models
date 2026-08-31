@@ -725,6 +725,20 @@ class DataHandler(BaseHandler):
         self.finish()
 
 
+class HealthHandler(RequestHandler):
+
+    def set_default_headers(self):
+        self.set_header("Cache-Control", "no-store")
+        self.set_header("Content-Type", "text/plain; charset=utf-8")
+
+    def get(self):
+        self.write("ok")
+
+    def head(self):
+        self.set_status(200)
+        self.finish()
+
+
 class APIVersionHandler(BaseHandler):
     def get(self):
         result = safe_query(query_utils.database_version)

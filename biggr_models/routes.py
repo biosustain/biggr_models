@@ -48,6 +48,7 @@ def get_routes():
     api_regex = r"(?P<api>/api/%s)?" % api_v
     routes = [
         (r"/", home_handlers.HomeHandler),
+        (r"/health/?$", utils.HealthHandler),
         (r"/about/?", utils.TemplateHandler, {"template_name": "about.html"}),
         (r"/statistics/?", home_handlers.StatisticsHandler),
         (
