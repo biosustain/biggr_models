@@ -1,0 +1,69 @@
+# Parses the "timed" nginx access log into Prometheus metrics.
+# This is the piece that makes latency questions answerable: the raw
+# combined log format records no timing at all.
+listen:
+  port: 4040
+  metrics_endpoint: /metrics
+
+namespaces:
+  - name: biggr
+    source:
+      files:
+        - /var/log/nginx/access.log
+    # Must match the `timed` log_format in nginx/default-prod.conf.
+    format: "$remote_addr - $remote_user [$time_local] \"$request\" $status $body_bytes_sent \"$http_referer\" \"$http_user_agent\" rt=$request_time uct=$upstream_connect_time uht=$upstream_header_time urt=$upstream_response_time"
+    labels:
+      app: biggr
+    # Bucket boundaries in seconds. Dense below 1s because that is where
+    # this app actually lives; the tail out to 30s exists to catch the
+    # pathological requests that trip uptime monitors.
+    histogram_buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30]
+    relabel_configs:
+      # Bot vs. human traffic. The access logs show heavy crawler load
+      # (Googlebot, AhrefsBot, meta-externalagent), and mixing it with
+      # real user traffic makes latency percentiles misleading.
+      - target_label: client_type
+        from: user_agent
+        matches:
+          - regexp: "(?i)(googlebot|bingbot|applebot|ahrefsbot|semrushbot|meta-externalagent|yandex|baiduspider|petalbot|dataforseo|bytespider)"
+            replacement: bot
+          - regexp: "(?i)uptimerobot"
+            replacement: monitor
+          - regexp: ".*"
+            replacement: human
+      # Collapse high-cardinality model/gene/reaction IDs into route shapes.
+      # Without this, every one of the millions of distinct URLs would
+      # become its own time series and melt Prometheus.
+      - target_label: route
+        from: request_uri
+        matches:
+          - regexp: "^/health/?$"
+            replacement: /health
+          - regexp: "^/static/.*"
+            replacement: /static
+          - regexp: "^/api/[^/]+/models/[^/]+/genes.*"
+            replacement: /api/models/:id/genes
+          - regexp: "^/api/[^/]+/models/[^/]+/reactions.*"
+            replacement: /api/models/:id/reactions
+          - regexp: "^/api/[^/]+/models/[^/]+/metabolites.*"
+            replacement: /api/models/:id/metabolites
+          - regexp: "^/api/.*"
+            replacement: /api/other
+          - regexp: "^/models/[^/]+/genes/.*"
+            replacement: /models/:id/genes/:gene
+          - regexp: "^/models/[^/]+/reactions/.*"
+            replacement: /models/:id/reactions/:rxn
+          - regexp: "^/models/[^/]+/metabolites/.*"
+            replacement: /models/:id/metabolites/:met
+          - regexp: "^/models/[^/]+/metabolite_in_reactions/.*"
+            replacement: /models/:id/metabolite_in_reactions
+          - regexp: "^/models/[^/]+/?$"
+            replacement: /models/:id
+          - regexp: "^/universal/.*"
+            replacement: /universal
+          - regexp: "^/search.*"
+            replacement: /search
+          - regexp: "^/$"
+            replacement: /
+          - regexp: ".*"
+            replacement: other

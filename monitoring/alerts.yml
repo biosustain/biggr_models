@@ -1,0 +1,88 @@
+groups:
+  - name: biggr-availability
+    rules:
+      # Deliberately requires 3 minutes of sustained failure. The
+      # UptimeRobot flapping on 2026-08-30 was single failed probes while
+      # the site kept serving 600-900 req/min; a "for: 3m" window would
+      # have stayed silent through all of it.
+      - alert: SiteDown
+        expr: up{job="nginx"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "nginx has been unreachable for 3 minutes"
+
+      - alert: WebAppDown
+        expr: |
+          sum(rate(biggr_http_response_count_total{status=~"5.."}[5m]))
+            /
+          sum(rate(biggr_http_response_count_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Over 5% of responses are 5xx"
+
+      - alert: HighLatency
+        # P95 for real users only - crawler traffic hits heavier pages and
+        # would otherwise drag the percentile up and cause false alarms.
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(biggr_http_response_time_seconds_bucket{client_type="human"}[5m])) by (le)
+          ) > 3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency for human traffic above 3s for 10 minutes"
+
+  - name: biggr-resources
+    rules:
+      - alert: DiskFillingUp
+        expr: |
+          node_filesystem_avail_bytes{mountpoint="/data"}
+            / node_filesystem_size_bytes{mountpoint="/data"} < 0.10
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Less than 10% free on /data"
+
+      - alert: HostMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Less than 10% available memory"
+
+  - name: biggr-postgres
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Postgres is not responding to the exporter"
+
+      - alert: PostgresConnectionsHigh
+        expr: |
+          sum(pg_stat_activity_count) by (instance)
+            / on(instance) pg_settings_max_connections > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Postgres using over 80% of max_connections"
+
+      # Certbot exited 1 on 2026-08-30; an expired cert takes the whole
+      # site down, so it is worth two weeks of warning.
+      - alert: TLSCertExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 14
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "TLS certificate expires in under 14 days"

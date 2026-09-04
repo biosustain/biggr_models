@@ -1,0 +1,126 @@
+# Monitoring stack, kept in a separate compose file so the production
+# stack in docker-compose.yml stays untouched.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml \
+#     --profile monitoring up -d
+#
+# Nothing here publishes a port to the public internet. Grafana binds to
+# 127.0.0.1 only; reach it with an SSH tunnel:
+#   ssh -L 3000:localhost:3000 biggr-prod
+networks:
+  biggr-net:
+    name: biggr-net
+    external: false
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  nginx-logs:
+
+services:
+  # Override of the production nginx service: attaches the shared log
+  # volume so the log exporter can tail the access log. Everything else
+  # about the service is inherited from docker-compose.yml.
+  nginx-prod:
+    volumes:
+      - /var/www/certbot/:/var/www/certbot/:ro
+      - /etc/letsencrypt/live/biggr.org/fullchain.pem:/etc/nginx/ssl/live/biggr.org/fullchain.pem
+      - /etc/letsencrypt/live/biggr.org/privkey.pem:/etc/nginx/ssl/live/biggr.org/privkey.pem
+      - nginx-logs:/var/log/nginx
+
+  prometheus:
+    profiles: [monitoring]
+    container_name: biggr-prometheus
+    image: prom/prometheus:v2.54.1
+    restart: always
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # 90 days of history, capped at 20GB so it can never fill /data.
+      - --storage.tsdb.retention.time=90d
+      - --storage.tsdb.retention.size=20GB
+      - --web.enable-lifecycle
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - 127.0.0.1:9090:9090
+    networks: [biggr-net]
+
+  grafana:
+    profiles: [monitoring]
+    container_name: biggr-grafana
+    image: grafana/grafana:11.2.0
+    restart: always
+    depends_on: [prometheus]
+    environment:
+      # Set GRAFANA_ADMIN_PASSWORD in .env - do not commit a password.
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - 127.0.0.1:3000:3000
+    networks: [biggr-net]
+
+  node-exporter:
+    profiles: [monitoring]
+    container_name: biggr-node-exporter
+    image: prom/node-exporter:v1.8.2
+    restart: always
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|run/credentials)($$|/)
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks: [biggr-net]
+
+  nginx-exporter:
+    profiles: [monitoring]
+    container_name: biggr-nginx-exporter
+    image: nginx/nginx-prometheus-exporter:1.3.0
+    restart: always
+    command:
+      - --nginx.scrape-uri=http://biggr-nginx-prod:8080/stub_status
+    networks: [biggr-net]
+
+  nginx-log-exporter:
+    profiles: [monitoring]
+    container_name: biggr-nginx-log-exporter
+    image: quay.io/martinhelmich/prometheus-nginxlog-exporter:v1.11.0
+    restart: always
+    command: ["-config-file", "/etc/exporter/config.yml"]
+    volumes:
+      - ./monitoring/nginx-log-exporter.yml:/etc/exporter/config.yml:ro
+      - nginx-logs:/var/log/nginx:ro
+    networks: [biggr-net]
+
+  # Probes https://bigg.bio/health from outside the app to capture TLS
+  # expiry and genuine external reachability.
+  blackbox-exporter:
+    profiles: [monitoring]
+    container_name: biggr-blackbox-exporter
+    image: prom/blackbox-exporter:v0.25.0
+    restart: always
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ./monitoring/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks: [biggr-net]
+
+  postgres-exporter:
+    profiles: [monitoring]
+    container_name: biggr-postgres-exporter
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    restart: always
+    environment:
+      # Reuses the credentials already in .env for the postgres container.
+      - DATA_SOURCE_URI=biggr-db:5432/postgres?sslmode=disable
+      - DATA_SOURCE_USER=${POSTGRES_USER:-postgres}
+      - DATA_SOURCE_PASS=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    networks: [biggr-net]
